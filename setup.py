@@ -27,5 +27,6 @@ setuptools.setup(
     python_requires='>=3.6',
     extra_requires={
       'fa': ['hazm>=0.7.0'],
+      'ru': ['spacy>=3.2.3'],
     }
 )

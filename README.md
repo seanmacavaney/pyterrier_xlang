@@ -23,7 +23,7 @@ Examples:
 
 ```python
 >>> fa_pre = pyterrier_xlang.preprocess.fa()
->>> fa.search('اعتراض فرانسه به مالیات سوخت')
+>>> fa_pre.search('اعتراض فرانسه به مالیات سوخت')
 # qid                     query
 #   1  اعتراض فرانسه به مال سوخ
 >>> dataset = pt.get_dataset('irds:hc4/fa/train')
@@ -44,7 +44,7 @@ Examples:
 
 ```python
 >>> from pyterrier_pisa import PisaIndex
->>> idx = PisaIndex('hc4_fa.pisa', stemmer='none', pretokenised=True, text_field=['title', 'text'])
+>>> idx = PisaIndex('hc4_fa.pisa', stemmer='none', text_field=['title', 'text'])
 >>> (fa_pre >> idx).index(dataset.get_corpus_iter())
 # (index built at hc4_fa.pisa)
 ```

@@ -55,33 +55,26 @@ def fa(normalise=True, stem=True, remove_stops=True, remove_punct=True):
   return Preprocessor(hazm.word_tokenize, stemmer=stemmer, preprocessor=hazm.Normalizer().normalize if normalise else None, term_filter=term_filter)
 
 
-def spacy_preprocessor(model, supports_stem=True, stops=None):
-  def wrapped(stem=True, remove_punct=True, remove_stops=True):
-    try:
-      import spacy
-    except ImportError as e:
+def spacy_preprocessor(model, supports_stem=True, remove_punct=True, remove_stops=True):
+  try:
+    import spacy
+  except ImportError as e:
       raise ImportError("Spacy module missing please run 'pip install spacy'", e)
-    try:
-      nlp = spacy.load(model, disable=['ner', 'parser', 'tok2vec'])
-    except OSError as e:
+  try:
+    nlp = spacy.load(model, disable=['ner', 'parser', 'tok2vec'])
+  except OSError as e:
       raise RuntimeError(f"Problem loading model {model} (you need to run 'python -m spacy download {model}' first)", e)
-    if supports_stem and stem:
-      stemmer = lambda t: t.lemma_
-    else:
-      stemmer = lambda t: t.norm_
-    term_filter = lambda t: True
-    if remove_stops:
-      if stops is not None:
-        def filter_stops(f):
-          return lambda t: f(t) and not t.is_stop
-      else:
-        def filter_stops(f):
-          return lambda t: f(t) and str(t) not in stops
-      term_filter = filter_stops(term_filter)
-    if remove_punct:
-      def filter_punct(f):
-        return lambda t: f(t) and not t.is_punct
-      term_filter = filter_punct(term_filter)
-    return Preprocessor(nlp, stemmer=stemmer, term_filter=term_filter)
-  return wrapped
-
+  if supports_stem:
+    stemmer = lambda t: t.lemma_
+  else:
+    stemmer = lambda t: t.norm_
+  term_filter = lambda t: True
+  if remove_stops:
+    def filter_stops(f):
+      return lambda t: f(t) and not t.is_stop
+    term_filter = filter_stops(term_filter)
+  if remove_punct:
+    def filter_punct(f):
+      return lambda t: f(t) and not t.is_punct
+    term_filter = filter_punct(term_filter)
+  return Preprocessor(nlp, stemmer=stemmer, term_filter=term_filter)

@@ -1,3 +1,4 @@
+import pyterrier as pt
 import functools
 from . import Preprocessor, SentencePassager
 
@@ -5,11 +6,13 @@ from . import Preprocessor, SentencePassager
 def _lib():
   try:
     import spacy
+    return spacy
   except ImportError as e:
     raise ImportError('"pip install spacy" required', e)
 
-@functools.lru_cache
+@functools.lru_cache()
 def _nlp(model):
+  spacy = _lib()
   try:
     return spacy.load(model, disable=['ner', 'parser', 'tok2vec'])
   except OSError as e:

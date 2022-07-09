@@ -61,7 +61,10 @@ def spacy_preprocessor(model, supports_stem=True, remove_punct=True, remove_stop
   except ImportError as e:
       raise ImportError("Spacy module missing please run 'pip install spacy'", e)
   try:
-    nlp = spacy.load(model, disable=['ner', 'parser', 'tok2vec'])
+    nlp = spacy.load(model)
+    names = nlp.component_names
+    for name in set(names) & {'tok2vec', 'tagger', 'attribute_ruler', 'lemmatizer', 'morphologizer'}:
+      nlp.enable_pipe(name)
   except OSError as e:
       raise RuntimeError(f"Problem loading model {model} (you need to run 'python -m spacy download {model}' first)", e)
   if supports_stem:

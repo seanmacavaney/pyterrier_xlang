@@ -65,7 +65,7 @@ def spacy_preprocessor(model, supports_stem=True, remove_punct=True, remove_stop
   except OSError as e:
       raise RuntimeError(f"Problem loading model {model} (you need to run 'python -m spacy download {model}' first)", e)
   if supports_stem:
-    stemmer = lambda t: t.lemma_
+    stemmer = lambda t: t.lemma_.lower()
   else:
     stemmer = lambda t: t.norm_
   term_filter = lambda t: True

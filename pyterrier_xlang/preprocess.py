@@ -1,3 +1,4 @@
+from ast import Import
 import string
 import pyterrier as pt  
 
@@ -78,3 +79,22 @@ def spacy_preprocessor(model, supports_stem=True, remove_punct=True, remove_stop
       return lambda t: f(t) and not t.is_punct
     term_filter = filter_punct(term_filter)
   return Preprocessor(nlp, stemmer=stemmer, term_filter=term_filter)
+
+def snowball_preprocessor(remove_punct=True, remove_stops=True):
+  try:
+    from nltk.stem.snowball import RussianStemmer
+    from nltk.tokenize import word_tokenize  
+    from nltk.corpus import stopwords
+  except ImportError as e:
+    raise ImportError("nltk module missing please run 'pip install nltk'", e)
+  term_filter = lambda t: True
+  if remove_stops:
+    russian_stopwords = stopwords.words("russian")
+    def filter_stops(f):
+      return lambda t: f(t) and t not in russian_stopwords
+    term_filter = filter_stops(term_filter)
+  if remove_punct:
+    def filter_punct(f):
+      return lambda t: f(t) and t not in string.punctuation
+    term_filter = filter_punct(term_filter)
+  return Preprocessor(word_tokenize, stemmer=RussianStemmer().stem, term_filter=term_filter)

@@ -98,3 +98,24 @@ def snowball_preprocessor(remove_punct=True, remove_stops=True):
       return lambda t: f(t) and t not in string.punctuation
     term_filter = filter_punct(term_filter)
   return Preprocessor(word_tokenize, stemmer=RussianStemmer().stem, term_filter=term_filter)
+
+def jieba_preprocessor(remove_punct=True, remove_stops=True):
+  try:
+    import jieba
+  except ImportError as e:
+    raise ImportError("jieba module missing please run 'pip install jieba", e)
+  try: 
+    from stopwordsiso import stopwords
+  except ImportError as e:
+    raise ImportError("stopwordsiso module missing please run 'pip install stopwordsiso'",e)
+  term_filter = lambda t: True
+  if remove_stops:
+    chinese_stopwords = stopwords(['zh'])
+    def filter_stops(f):
+      return lambda t: f(t) and t not in chinese_stopwords
+    term_filter = filter_stops(term_filter)
+  if remove_punct:
+    def filter_punct(f):
+      return lambda t: f(t) and t not in string.punctuation
+    term_filter = filter_punct(term_filter)
+  return Preprocessor(jieba.lcut, term_filter=term_filter)

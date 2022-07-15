@@ -3,7 +3,7 @@ import string
 import pyterrier as pt  
 
 class Preprocessor(pt.transformer.TransformerBase):
-  def __init__(self, tokeniser, stemmer=None, preprocessor=None, term_filter=None, text_fields=['title', 'text', 'body'], push_query=True):
+  def __init__(self, tokeniser, stemmer=None, preprocessor=None, term_filter=None, text_fields=['title', 'text', 'body', 'query'], push_query=True):
     self.preprocessor = preprocessor
     self.tokeniser = tokeniser
     self.term_filter = term_filter
@@ -15,9 +15,9 @@ class Preprocessor(pt.transformer.TransformerBase):
     if self.push_query and 'query' in df.columns:
       pt.model.push_queries(df)
     if hasattr(df, 'parallel_apply'):
-      df = df.assign(**{f: df[f].parallel_apply(self.process_text) for f in self.text_fields + ['query'] if f in df.columns})
+      df = df.assign(**{f: df[f].parallel_apply(self.process_text) for f in self.text_fields if f in df.columns})
     else:
-      df = df.assign(**{f: df[f].apply(self.process_text) for f in self.text_fields + ['query'] if f in df.columns})
+      df = df.assign(**{f: df[f].apply(self.process_text) for f in self.text_fields if f in df.columns})
     return df
 
   def process_text(self, s):

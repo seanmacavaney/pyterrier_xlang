@@ -31,7 +31,10 @@ class Preprocessor(pt.transformer.TransformerBase):
     return ' '.join(toks)
 
 
-def fa(normalise=True, stem=True, remove_stops=True, remove_punct=True):
+def hazm_preprocessor(normalise=True, stem=True, remove_stops=True, remove_punct=True):
+  '''
+  Creates Preprocessor that uses hazm (Farsi only)
+  '''
   try:
     import hazm
   except ImportError as e:
@@ -57,6 +60,9 @@ def fa(normalise=True, stem=True, remove_stops=True, remove_punct=True):
 
 
 def spacy_preprocessor(model, supports_stem=True, remove_punct=True, remove_stops=True):
+  '''
+  Creates Preprocessor that uses spacy nlp models
+  '''
   try:
     import spacy
   except ImportError as e:
@@ -80,26 +86,32 @@ def spacy_preprocessor(model, supports_stem=True, remove_punct=True, remove_stop
     term_filter = filter_punct(term_filter)
   return Preprocessor(nlp, stemmer=stemmer, term_filter=term_filter)
 
-def snowball_preprocessor(remove_punct=True, remove_stops=True):
+def snowball_preprocessor(lang, remove_punct=True, remove_stops=True):
+  '''
+  Creates Preprocessor that uses snowball
+  '''
   try:
-    from nltk.stem.snowball import RussianStemmer
+    from nltk.stem import SnowballStemmer
     from nltk.tokenize import word_tokenize  
     from nltk.corpus import stopwords
   except ImportError as e:
     raise ImportError("nltk module missing please run 'pip install nltk'", e)
   term_filter = lambda t: True
   if remove_stops:
-    russian_stopwords = stopwords.words("russian")
+    stopwords = stopwords.words(lang)
     def filter_stops(f):
-      return lambda t: f(t) and t not in russian_stopwords
+      return lambda t: f(t) and t not in stopwords
     term_filter = filter_stops(term_filter)
   if remove_punct:
     def filter_punct(f):
       return lambda t: f(t) and t not in string.punctuation
     term_filter = filter_punct(term_filter)
-  return Preprocessor(word_tokenize, stemmer=RussianStemmer().stem, term_filter=term_filter)
+  return Preprocessor(word_tokenize, stemmer=SnowballStemmer(lang).stem, term_filter=term_filter)
 
 def jieba_preprocessor(remove_punct=True, remove_stops=True):
+  '''
+  Creates Preprocessor that uses jieba (Chinese only)
+  '''
   try:
     import jieba
   except ImportError as e:
@@ -119,3 +131,26 @@ def jieba_preprocessor(remove_punct=True, remove_stops=True):
       return lambda t: f(t) and t not in string.punctuation
     term_filter = filter_punct(term_filter)
   return Preprocessor(jieba.lcut, term_filter=term_filter)
+
+def hgf_preprocessor(model):
+  '''
+  Creates Preprocessor that uses HuggingFace Tokenisers
+  '''
+  try:
+    from transformers import  AutoTokenizer
+  except ImportError as e:
+    raise ImportError('Huggingface Transformers module missing, please run "pip install transformers')
+  
+  tokenizer =  AutoTokenizer.from_pretrained(model)
+  return Preprocessor(tokeniser=tokenizer.tokenize)  
+
+def parsivar_preprocessor(normalise=True, stem=True):
+  '''
+  Creates Preprocessor that uses Parsivar (Farsi only)
+  '''
+  try:
+    from parsivar import Normalizer, Tokenizer, FindStems
+  except ImportError as e:
+    raise ImportError('Parsivar required for preprocessing, please run "pip install parsivar"')
+
+  return Preprocessor(tokeniser=Tokenizer().tokenize_words, preprocessor=Normalizer().normalize if normalise else None, stemmer=FindStems().convert_to_stem if stem else None)

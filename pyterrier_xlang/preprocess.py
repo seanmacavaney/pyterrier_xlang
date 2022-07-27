@@ -61,7 +61,7 @@ def hazm_preprocessor(normalise=True, stem=True, remove_stops=True, remove_punct
 
 def spacy_preprocessor(model, supports_stem=True, remove_punct=True, remove_stops=True):
   '''
-  Creates Preprocessor that uses spacy nlp models
+  Creates Preprocessor that uses spacy nlp model pipelines
   '''
   try:
     import spacy
@@ -85,6 +85,26 @@ def spacy_preprocessor(model, supports_stem=True, remove_punct=True, remove_stop
       return lambda t: f(t) and not t.is_punct
     term_filter = filter_punct(term_filter)
   return Preprocessor(nlp, stemmer=stemmer, term_filter=term_filter)
+
+def spacy_tokeniser(remove_punct=True, remove_stops=True):
+  '''
+  Creates Preprocessor that uses spacy Tokenisers (currently only supports Farsi)
+  '''
+  try:
+    from spacy.lang.fa import Persian
+  except ImportError as e:
+    raise ImportError("Spacy module required please run 'pip install spacy'", e)
+  stemmer = lambda t: t.norm_
+  term_filter = lambda t: True
+  if remove_stops:
+    def filter_stops(f):
+      return lambda t: f(t) and not t.is_stop
+    term_filter = filter_stops(term_filter)
+  if remove_punct:
+    def filter_punct(f):
+      return lambda t: f(t) and not t.is_punct
+    term_filter = filter_punct(term_filter)
+  return Preprocessor(tokeniser=Persian().tokenizer, stemmer=stemmer, term_filter=term_filter)
 
 def snowball_preprocessor(lang, remove_punct=True, remove_stops=True):
   '''

@@ -154,3 +154,25 @@ def parsivar_preprocessor(normalise=True, stem=True):
     raise ImportError('Parsivar required for preprocessing, please run "pip install parsivar"')
 
   return Preprocessor(tokeniser=Tokenizer().tokenize_words, preprocessor=Normalizer().normalize if normalise else None, stemmer=FindStems().convert_to_stem if stem else None)
+
+def ngram_preprocessor(N=3):
+  '''
+  Creates Preprocessor that uses ntlk-based N-grams
+  '''
+  try:
+    import nltk
+    from nltk.util import ngrams
+  except ImportError as e:
+    raise ImportError('nltk required from preprocessing, please run "pip install nltk')
+  
+  def tokeniser(text, N=N):
+    out = []
+    ngram_out = ngrams(sequence=nltk.word_tokenize(text), n=N)
+    for ngram in ngram_out:
+      out.append(' '.join(ngram))
+    return out
+
+  return Preprocessor(tokeniser=tokeniser)
+
+
+

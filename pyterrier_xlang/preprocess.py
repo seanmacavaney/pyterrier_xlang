@@ -1,6 +1,8 @@
 from ast import Import
+from cgitb import text
 import string
 import pyterrier as pt  
+import stanza
 
 class Preprocessor(pt.transformer.TransformerBase):
   def __init__(self, tokeniser, stemmer=None, preprocessor=None, term_filter=None, text_fields=['title', 'text', 'body', 'query'], push_query=True):
@@ -30,6 +32,30 @@ class Preprocessor(pt.transformer.TransformerBase):
       toks = map(self.stemmer, toks)
     return ' '.join(toks)
 
+class StanzaPreprocessor(pt.transformer.TransformerBase):
+    def __init__(self, nlp, tokeniser, stemmer=None, preprocessor=None, term_filter=None, text_fields=['title', 'text', 'body', 'query'], push_query=True):
+      self.preprocessor = preprocessor
+      self.nlp = nlp
+      self.tokeniser = tokeniser
+      self.term_filter = term_filter
+      self.stemmer = stemmer
+      self.text_fields = [text_fields] if isinstance(text_fields, str) else text_fields
+      self.push_query = push_query
+
+    def transform(self, df):
+      if self.push_query and 'query' in df.columns:
+        pt.model.push_queries(df)
+        df = df.assign(**{f: self.process_text(df[f]) for f in self.text_fields if f in df.columns})
+      return df
+    
+    def process_text(self, column):
+      in_docs = [stanza.Document([], text=text) for text in column]
+      docs = self.nlp(in_docs)
+      out_docs = self.tokeniser(docs)
+
+      if self.term_filter:
+        out_docs = list(map(self.term_filter, out_docs))
+      return out_docs # list of preproc text
 
 def hazm_preprocessor(normalise=True, stem=True, remove_stops=True, remove_punct=True):
   '''
@@ -194,5 +220,46 @@ def ngram_preprocessor(N=3, char_level=False):
 
   return Preprocessor(tokeniser=tokeniser)
 
+def stanza_preprocessor(lang, stem=True, remove_punct=True):
+  '''
+  Creates Preprocessor that uses Stanza models
+  '''
+  try:
+    import stanza
+    import string
+  except ImportError as e:
+    raise ImportError("Stanza required for preprocessing, please run 'pip install stanza'", e)
+  
+  stanza.download(lang)
 
+  if remove_punct:
+    def filter_punct(text):
+      return text.translate(str.maketrans('', '', string.punctuation))
 
+  if stem:
+    processors = 'tokenize, lemma'
+    def tokenize(docs):
+      toks = []
+      for entry in docs:
+        entries = []
+        for sentence in entry.sentences:
+          for token in sentence.words:
+            if token.lemma:
+              entries.append(token.lemma)
+            else:
+              entries.append(token.text)
+        toks.append(entries)
+      return [' '.join(tok) for tok in toks]
+  else:
+    processors = 'tokenize'
+    def tokenize(docs):
+      toks = []
+      for entry in docs:
+        entries = []
+        for sentence in entry.sentences:
+          for token in sentence.words:
+            entries.append(token.text)
+        toks.append(entries)  
+      return [' '.join(tok) for tok in toks]
+    
+  return StanzaPreprocessor(nlp=stanza.Pipeline(lang, processors=processors), tokeniser=tokenize, term_filter=filter_punct if remove_punct else None)

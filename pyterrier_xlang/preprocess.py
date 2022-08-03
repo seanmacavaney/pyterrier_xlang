@@ -23,13 +23,17 @@ class Preprocessor(pt.transformer.TransformerBase):
     return df
 
   def process_text(self, s):
+    if self.term_filter:
+      s = self.term_filter(s)
+    
     if self.preprocessor:
       s = self.preprocessor(s)
+    
     toks = self.tokeniser(s)
-    if self.term_filter:
-      toks = filter(self.term_filter, toks)
+    
     if self.stemmer:
       toks = map(self.stemmer, toks)
+
     return ' '.join(toks)
 
 class StanzaPreprocessor(pt.transformer.TransformerBase):
@@ -178,7 +182,7 @@ def jieba_preprocessor(remove_punct=True, remove_stops=True):
     term_filter = filter_punct(term_filter)
   return Preprocessor(jieba.lcut, term_filter=term_filter)
 
-def hgf_preprocessor(model):
+def hgf_preprocessor(model, remove_punct=True):
   '''
   Creates Preprocessor that uses HuggingFace Tokenisers
   '''
@@ -187,8 +191,12 @@ def hgf_preprocessor(model):
   except ImportError as e:
     raise ImportError('Huggingface Transformers module missing, please run "pip install transformers')
   
+  if remove_punct:
+    def filter_punct(text):
+      return text.translate(str.maketrans('', '', string.punctuation))
+
   tokenizer =  AutoTokenizer.from_pretrained(model)
-  return Preprocessor(tokeniser=tokenizer.tokenize)  
+  return Preprocessor(tokeniser=tokenizer.tokenize, term_filter=filter_punct)  
 
 def parsivar_preprocessor(normalise=True, stem=True):
   '''
@@ -201,7 +209,7 @@ def parsivar_preprocessor(normalise=True, stem=True):
 
   return Preprocessor(tokeniser=Tokenizer().tokenize_words, preprocessor=Normalizer().normalize if normalise else None, stemmer=FindStems().convert_to_stem if stem else None)
 
-def ngram_preprocessor(N=3, char_level=False):
+def ngram_preprocessor(N=3, char_level=False, remove_punct=True):
   '''
   Creates Preprocessor that uses ntlk-based N-grams
   '''
@@ -211,6 +219,10 @@ def ngram_preprocessor(N=3, char_level=False):
   except ImportError as e:
     raise ImportError('nltk required from preprocessing, please run "pip install nltk')
   
+  if remove_punct:
+    def filter_punct(text):
+      return text.translate(str.maketrans('', '', string.punctuation))
+
   if char_level:
     def tokeniser(text, N=N):
       return ["".join(ngram) for ngram in ngrams(text,n=N)]
@@ -218,7 +230,7 @@ def ngram_preprocessor(N=3, char_level=False):
     def tokeniser(text, N=N):
       return ["".join(ngram) for ngram in ngrams(sequence=nltk.word_tokenize(text), n=N)]
 
-  return Preprocessor(tokeniser=tokeniser)
+  return Preprocessor(tokeniser=tokeniser, term_filter=filter_punct)
 
 def stanza_preprocessor(lang, stem=True, remove_punct=True):
   '''

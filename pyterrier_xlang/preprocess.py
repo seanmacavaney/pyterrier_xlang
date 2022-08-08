@@ -22,15 +22,14 @@ class Preprocessor(pt.transformer.TransformerBase):
       df = df.assign(**{f: df[f].apply(self.process_text) for f in self.text_fields if f in df.columns})
     return df
 
-  def process_text(self, s):
-    if self.term_filter:
-      s = self.term_filter(s)
-    
+  def process_text(self, s):  
     if self.preprocessor:
       s = self.preprocessor(s)
     
     toks = self.tokeniser(s)
-    
+
+    if self.term_filter:
+      toks = filter(self.term_filter, toks)
     if self.stemmer:
       toks = map(self.stemmer, toks)
 

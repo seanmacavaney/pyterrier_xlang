@@ -5,10 +5,11 @@ import pyterrier as pt
 import stanza
 
 class Preprocessor(pt.transformer.TransformerBase):
-  def __init__(self, tokeniser, stemmer=None, preprocessor=None, term_filter=None, text_fields=['title', 'text', 'body', 'query'], push_query=True):
+  def __init__(self, tokeniser, stemmer=None, preprocessor=None, term_filter=None, text_fields=['title', 'text', 'body', 'query'], push_query=True, filter_by_char=False):
     self.preprocessor = preprocessor
     self.tokeniser = tokeniser
     self.term_filter = term_filter
+    self.filter_by_char = filter_by_char
     self.stemmer = stemmer
     self.text_fields = [text_fields] if isinstance(text_fields, str) else text_fields
     self.push_query = push_query
@@ -27,9 +28,11 @@ class Preprocessor(pt.transformer.TransformerBase):
       s = self.preprocessor(s)
     
     toks = self.tokeniser(s)
-
     if self.term_filter:
-      toks = filter(self.term_filter, toks)
+      if self.filter_by_char:
+        toks = [''.join(filter(self.term_filter, list(tok))) for tok in toks]
+      else:
+        toks = filter(self.term_filter, toks)
     if self.stemmer:
       toks = map(self.stemmer, toks)
 
@@ -77,9 +80,8 @@ def hazm_preprocessor(normalise=True, stem=True, remove_stops=True, remove_punct
   if remove_stops or remove_punct:
     term_filter = lambda t: True
     if remove_stops:
-      stops = set(hazm.stopwords_list())
       def filter_stops(f):
-        return lambda t: f(t) and t not in stops
+        return lambda t: f(t) and t not in set(hazm.stopwords_list())
       term_filter = filter_stops(term_filter)
     if remove_punct:
       def filter_punct(f):
@@ -147,9 +149,8 @@ def snowball_preprocessor(lang, remove_punct=True, remove_stops=True):
     raise ImportError("nltk module missing please run 'pip install nltk'", e)
   term_filter = lambda t: True
   if remove_stops:
-    stopwords = stopwords.words(lang)
     def filter_stops(f):
-      return lambda t: f(t) and t not in stopwords
+      return lambda t: f(t) and t not in set(stopwords.words(lang))
     term_filter = filter_stops(term_filter)
   if remove_punct:
     def filter_punct(f):
@@ -171,9 +172,8 @@ def jieba_preprocessor(remove_punct=True, remove_stops=True):
     raise ImportError("stopwordsiso module missing please run 'pip install stopwordsiso'",e)
   term_filter = lambda t: True
   if remove_stops:
-    chinese_stopwords = stopwords(['zh'])
     def filter_stops(f):
-      return lambda t: f(t) and t not in chinese_stopwords
+      return lambda t: f(t) and t not in set(stopwords(['zh']))
     term_filter = filter_stops(term_filter)
   if remove_punct:
     def filter_punct(f):
@@ -189,15 +189,17 @@ def hgf_preprocessor(model, remove_punct=True):
     from transformers import  AutoTokenizer
   except ImportError as e:
     raise ImportError('Huggingface Transformers module missing, please run "pip install transformers')
-  
+  term_filter = None
   if remove_punct:
-    def filter_punct(text):
-      return text.translate(str.maketrans('', '', string.punctuation))
+    term_filter = lambda t: True
+    def filter_punct(f):
+      return lambda t: f(t) and t not in string.punctuation
+    term_filter = filter_punct(term_filter)
 
   tokenizer =  AutoTokenizer.from_pretrained(model)
-  return Preprocessor(tokeniser=tokenizer.tokenize, term_filter=filter_punct)  
+  return Preprocessor(tokeniser=tokenizer.tokenize, term_filter=term_filter)  
 
-def parsivar_preprocessor(normalise=True, stem=True):
+def parsivar_preprocessor(normalise=True, stem=True, remove_punct=True):
   '''
   Creates Preprocessor that uses Parsivar (Farsi only)
   '''
@@ -205,10 +207,17 @@ def parsivar_preprocessor(normalise=True, stem=True):
     from parsivar import Normalizer, Tokenizer, FindStems
   except ImportError as e:
     raise ImportError('Parsivar required for preprocessing, please run "pip install parsivar"')
+  
+  term_filter = None
+  if remove_punct:
+    term_filter = lambda t: True
+    def filter_punct(f):
+      return lambda t: f(t) and t not in string.punctuation
+    term_filter = filter_punct(term_filter)
+  
+  return Preprocessor(tokeniser=Tokenizer().tokenize_words, preprocessor=Normalizer().normalize if normalise else None, stemmer=FindStems().convert_to_stem if stem else None, term_filter=term_filter)
 
-  return Preprocessor(tokeniser=Tokenizer().tokenize_words, preprocessor=Normalizer().normalize if normalise else None, stemmer=FindStems().convert_to_stem if stem else None)
-
-def ngram_preprocessor(N=3, char_level=False, remove_punct=True):
+def ngram_preprocessor(N=3, char_level=True, remove_punct=True):
   '''
   Creates Preprocessor that uses ntlk-based N-grams
   '''
@@ -218,10 +227,13 @@ def ngram_preprocessor(N=3, char_level=False, remove_punct=True):
   except ImportError as e:
     raise ImportError('nltk required from preprocessing, please run "pip install nltk')
   
+  term_filter = None
   if remove_punct:
-    def filter_punct(text):
-      return text.translate(str.maketrans('', '', string.punctuation))
-
+    term_filter = lambda c: True
+    def filter_punct(f):
+      return lambda c: f(c) and c not in string.punctuation
+    term_filter = filter_punct(term_filter)
+  
   if char_level:
     def tokeniser(text, N=N):
       return ["".join(ngram) for ngram in ngrams(text,n=N)]
@@ -229,7 +241,7 @@ def ngram_preprocessor(N=3, char_level=False, remove_punct=True):
     def tokeniser(text, N=N):
       return ["".join(ngram) for ngram in ngrams(sequence=nltk.word_tokenize(text), n=N)]
 
-  return Preprocessor(tokeniser=tokeniser, term_filter=filter_punct)
+  return Preprocessor(tokeniser=tokeniser, term_filter=term_filter, filter_characters=True)
 
 def stanza_preprocessor(lang, stem=True, remove_punct=True):
   '''

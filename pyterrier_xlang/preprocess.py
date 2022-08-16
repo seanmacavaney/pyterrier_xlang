@@ -241,7 +241,7 @@ def ngram_preprocessor(N=3, char_level=True, remove_punct=True):
     def tokeniser(text, N=N):
       return ["".join(ngram) for ngram in ngrams(sequence=nltk.word_tokenize(text), n=N)]
 
-  return Preprocessor(tokeniser=tokeniser, term_filter=term_filter, filter_characters=True)
+  return Preprocessor(tokeniser=tokeniser, term_filter=term_filter, filter_by_char=True)
 
 def stanza_preprocessor(lang, stem=True, remove_punct=True):
   '''

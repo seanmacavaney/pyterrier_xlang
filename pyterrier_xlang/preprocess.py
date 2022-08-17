@@ -1,15 +1,15 @@
 from ast import Import
 from cgitb import text
 import string
+from warnings import filters
 import pyterrier as pt  
 import stanza
 
 class Preprocessor(pt.transformer.TransformerBase):
-  def __init__(self, tokeniser, stemmer=None, preprocessor=None, text_fields=['title', 'text', 'body', 'query'], push_query=True, punct_filter=None, stops_filter=None):
+  def __init__(self, tokeniser, stemmer=None, preprocessor=None, text_fields=['title', 'text', 'body', 'query'], push_query=True, filters=None):
     self.preprocessor = preprocessor
     self.tokeniser = tokeniser
-    self.punct_filter = punct_filter
-    self.stops_filter = stops_filter
+    self.filters = filters
     self.stemmer = stemmer
     self.text_fields = [text_fields] if isinstance(text_fields, str) else text_fields
     self.push_query = push_query
@@ -29,11 +29,11 @@ class Preprocessor(pt.transformer.TransformerBase):
     
     toks = self.tokeniser(s)
 
-    if self.punct_filter:
-      toks = self.punct_filter(toks)
+    if self.filters:
+      for f in self.filters:
+       toks = f(toks)
+      toks = list(filter(None, toks)) #removes empty string
     
-    if self.stops_filter:
-      toks = self.stops_filter(toks)
 
     if self.stemmer:
       toks = map(self.stemmer, toks)
@@ -41,11 +41,12 @@ class Preprocessor(pt.transformer.TransformerBase):
     return ' '.join(toks)
 
 class StanzaPreprocessor(pt.transformer.TransformerBase):
-    def __init__(self, nlp, tokeniser, stemmer=None, preprocessor=None, term_filter=None, text_fields=['title', 'text', 'body', 'query'], push_query=True):
+    def __init__(self, nlp, tokeniser, stemmer=None, preprocessor=None, term_filter=None, text_fields=['title', 'text', 'body', 'query'], push_query=True, filters=None):
       self.preprocessor = preprocessor
       self.nlp = nlp
       self.tokeniser = tokeniser
       self.term_filter = term_filter
+      self.filters = filters
       self.stemmer = stemmer
       self.text_fields = [text_fields] if isinstance(text_fields, str) else text_fields
       self.push_query = push_query
@@ -61,8 +62,9 @@ class StanzaPreprocessor(pt.transformer.TransformerBase):
       docs = self.nlp(in_docs)
       out_docs = self.tokeniser(docs)
 
-      if self.term_filter:
-        out_docs = list(map(self.term_filter, out_docs))
+      if self.filters:
+        for f in self.filters:
+          out_docs = list(map(f, out_docs))
       return out_docs # list of preproc text
 
 def hazm_preprocessor(normalise=True, stem=True, remove_stops=True, remove_punct=True):
@@ -73,22 +75,30 @@ def hazm_preprocessor(normalise=True, stem=True, remove_stops=True, remove_punct
     import hazm
   except ImportError as e:
     raise ImportError("hazm module required to perform Farsi pre-processing please run 'pip install hazm'", e)
+  
   stemmer = None
+  
   if stem == 'lemma':
     stemmer = hazm.Lemmatizer().lemmatize
   elif stem:
     stemmer = hazm.Stemmer().stem
 
+  filters = []
+
   if remove_stops:
     stopwords = set(hazm.stopwords_list())
     def filter_stops(toks):
       return [tok for tok in toks if tok not in stopwords]
+    
+    filters.append(filter_stops)
 
   if remove_punct:
     def filter_punct(toks):
       return [tok.translate(str.maketrans('', '', string.punctuation)) for tok in toks]
+    
+    filters.append(filter_punct)
   
-  return Preprocessor(hazm.word_tokenize, stemmer=stemmer, preprocessor=hazm.Normalizer().normalize if normalise else None, punct_filter=filter_punct if remove_punct else None, stops_filter=filter_stops if remove_stops else None)
+  return Preprocessor(hazm.word_tokenize, stemmer=stemmer, preprocessor=hazm.Normalizer().normalize if normalise else None, filters=filters)
 
 
 def spacy_preprocessor(model, supports_stem=True, remove_punct=True, remove_stops=True):
@@ -103,18 +113,27 @@ def spacy_preprocessor(model, supports_stem=True, remove_punct=True, remove_stop
     nlp = spacy.load(model, disable=['tok2vec', 'ner', 'tagger', 'parser'])
   except OSError as e:
       raise RuntimeError(f"Problem loading model {model} (you need to run 'python -m spacy download {model}' first)", e)
+  
   if supports_stem:
     stemmer = lambda t: t.lemma_.lower()
   else:
     stemmer = lambda t: t.norm_
+ 
+  filters = []
+
   if remove_stops:
     def filter_stops(toks):
       return [tok for tok in toks if not tok.is_stop]
+    
+    filters.append(filter_stops)
+  
   if remove_punct:
     def filter_punct(toks):
       return [tok for tok in toks if not tok.is_punct]
+    
+    filters.append(filter_punct)
 
-  return Preprocessor(nlp, stemmer=stemmer, punct_filter=filter_punct if remove_punct else None, stops_filter=filter_stops if remove_stops else None)
+  return Preprocessor(nlp, stemmer=stemmer, filters=filters)
 
 def spacy_tokeniser(remove_punct=True, remove_stops=True):
   '''
@@ -124,15 +143,24 @@ def spacy_tokeniser(remove_punct=True, remove_stops=True):
     from spacy.lang.fa import Persian
   except ImportError as e:
     raise ImportError("Spacy module required please run 'pip install spacy'", e)
+  
   stemmer = lambda t: t.norm_
+  
+  filters = []
+  
   if remove_stops:
     def filter_stops(toks):
       return [tok for tok in toks if not tok.is_stop]
+    
+    filters.append(filter_stops)
+
   if remove_punct:
     def filter_punct(toks):
       return [tok for tok in toks if not tok.is_punct]
+    
+    filters.append(filter_punct)
 
-  return Preprocessor(tokeniser=Persian().tokenizer, stemmer=stemmer, punct_filter=filter_punct if remove_punct else None, stops_filter=filter_stops if remove_stops else None)
+  return Preprocessor(tokeniser=Persian().tokenizer, stemmer=stemmer, filters=filters)
 
 def snowball_preprocessor(lang, remove_punct=True, remove_stops=True):
   '''
@@ -144,17 +172,23 @@ def snowball_preprocessor(lang, remove_punct=True, remove_stops=True):
     from nltk.corpus import stopwords
   except ImportError as e:
     raise ImportError("nltk module missing please run 'pip install nltk'", e)
-
+  
+  filters = []
+  
   if remove_stops:
     stopwords = set(stopwords.words(lang))
     def filter_stops(toks):
       return [tok for tok in toks if tok not in stopwords]
+    
+    filters.append(filter_stops)
 
   if remove_punct:
     def filter_punct(toks):
       return [tok.translate(str.maketrans('', '', string.punctuation)) for tok in toks]
-  
-  return Preprocessor(word_tokenize, stemmer=SnowballStemmer(lang).stem, punct_filter=filter_punct if remove_punct else None, stops_filter=filter_stops if remove_stops else None)
+    
+    filters.append(filter_punct)
+
+  return Preprocessor(word_tokenize, stemmer=SnowballStemmer(lang).stem, filters=filters)
 
 def jieba_preprocessor(remove_punct=True, remove_stops=True):
   '''
@@ -168,16 +202,23 @@ def jieba_preprocessor(remove_punct=True, remove_stops=True):
     from stopwordsiso import stopwords
   except ImportError as e:
     raise ImportError("stopwordsiso module missing please run 'pip install stopwordsiso'",e)
+
+  filters = []
+
   if remove_stops:
     stopwords = set(stopwords(['zh']))
     def filter_stops(toks):
       return [tok for tok in toks if tok not in stopwords]
-
+    
+    filters.append(filter_stops)
+  
   if remove_punct:
     def filter_punct(toks):
       return [tok.translate(str.maketrans('', '', string.punctuation)) for tok in toks]
-
-  return Preprocessor(jieba.lcut, punct_filter=filter_punct if remove_punct else None, stops_filter=filter_stops if remove_stops else None)
+    
+    filters.append(filter_punct)
+  
+  return Preprocessor(jieba.lcut, filters=filters)
 
 def hgf_preprocessor(model, remove_punct=True):
   '''
@@ -188,12 +229,17 @@ def hgf_preprocessor(model, remove_punct=True):
   except ImportError as e:
     raise ImportError('Huggingface Transformers module missing, please run "pip install transformers')
   
+  filters = []
+
   if remove_punct:
     def filter_punct(toks):
       return [tok.translate(str.maketrans('', '', string.punctuation)) for tok in toks]
+    
+    filters.append(filter_punct)
 
   tokenizer =  AutoTokenizer.from_pretrained(model)
-  return Preprocessor(tokeniser=tokenizer.tokenize, punct_filter=filter_punct if remove_punct else None)  
+
+  return Preprocessor(tokeniser=tokenizer.tokenize, filters=filters)  
 
 def parsivar_preprocessor(normalise=True, stem=True, remove_punct=True):
   '''
@@ -204,11 +250,15 @@ def parsivar_preprocessor(normalise=True, stem=True, remove_punct=True):
   except ImportError as e:
     raise ImportError('Parsivar required for preprocessing, please run "pip install parsivar"')
   
+  filters = []
+
   if remove_punct:
     def filter_punct(toks):
       return [tok.translate(str.maketrans('', '', string.punctuation)) for tok in toks]
+    
+    filters.append(filter_punct)
   
-  return Preprocessor(tokeniser=Tokenizer().tokenize_words, preprocessor=Normalizer().normalize if normalise else None, stemmer=FindStems().convert_to_stem if stem else None, punct_filter=filter_punct if remove_punct else None)
+  return Preprocessor(tokeniser=Tokenizer().tokenize_words, preprocessor=Normalizer().normalize if normalise else None, stemmer=FindStems().convert_to_stem if stem else None, filters=filters)
 
 def ngram_preprocessor(N=3, char_level=True, remove_punct=True, filter_by_char=True):
   '''
@@ -220,10 +270,14 @@ def ngram_preprocessor(N=3, char_level=True, remove_punct=True, filter_by_char=T
   except ImportError as e:
     raise ImportError('nltk required from preprocessing, please run "pip install nltk')
   
+  filters = []
+
   if remove_punct:
     def filter_punct(toks):
       return [tok.translate(str.maketrans('', '', string.punctuation)) for tok in toks]
-  
+    
+    filters.append(filter_punct)
+
   if char_level:
     def tokeniser(text, N=N):
       return ["".join(ngram) for ngram in ngrams(text,n=N)]
@@ -231,7 +285,7 @@ def ngram_preprocessor(N=3, char_level=True, remove_punct=True, filter_by_char=T
     def tokeniser(text, N=N):
       return ["".join(ngram) for ngram in ngrams(sequence=nltk.word_tokenize(text), n=N)]
 
-  return Preprocessor(tokeniser=tokeniser, punct_filter=filter_punct if remove_punct else None)
+  return Preprocessor(tokeniser=tokeniser, filters=filters)
 
 def stanza_preprocessor(lang, stem=True, remove_punct=True):
   '''
@@ -244,10 +298,14 @@ def stanza_preprocessor(lang, stem=True, remove_punct=True):
     raise ImportError("Stanza required for preprocessing, please run 'pip install stanza'", e)
   
   stanza.download(lang)
+  
+  filters = []
 
   if remove_punct:
     def filter_punct(text):
       return text.translate(str.maketrans('', '', string.punctuation))
+
+    filters.append(filter_punct)
 
   if stem:
     processors = 'tokenize, lemma'
@@ -275,4 +333,4 @@ def stanza_preprocessor(lang, stem=True, remove_punct=True):
         toks.append(entries)  
       return [' '.join(tok) for tok in toks]
     
-  return StanzaPreprocessor(nlp=stanza.Pipeline(lang, processors=processors), tokeniser=tokenize, term_filter=filter_punct if remove_punct else None)
+  return StanzaPreprocessor(nlp=stanza.Pipeline(lang, processors=processors), tokeniser=tokenize, filters=filters)

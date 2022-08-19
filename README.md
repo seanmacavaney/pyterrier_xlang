@@ -8,7 +8,7 @@ PyTerrier components for cross-language retrieval.
 
 ### `pyterrier_xlang.preprocess.fa`: Persian/Farsi
 
-Performs noramlisation, tokenisation, amd stemming for queries and documents via the [hazm](https://github.com/sobhe/hazm) package.
+Performs normalisation, tokenisation, amd stemming for queries and documents via the [hazm](https://github.com/sobhe/hazm) package.
 
 ```python
 pyterrier_xlang.preprocess.fa(normalise=True, stem=True)
@@ -22,7 +22,7 @@ Examples:
 **1: Apply preprocessing to query or a set of queries:**
 
 ```python
->>> fa_pre = pyterrier_xlang.preprocess.fa()
+>>> fa_pre = fa(remove_stops=False)
 >>> fa_pre.search('اعتراض فرانسه به مالیات سوخت')
 # qid                     query
 #   1  اعتراض فرانسه به مال سوخ

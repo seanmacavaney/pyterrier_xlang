@@ -4,24 +4,44 @@ import string
 from warnings import filters
 import pyterrier as pt  
 import stanza
+from collections import Counter
 
 class Preprocessor(pt.transformer.TransformerBase):
-  def __init__(self, tokeniser, stemmer=None, preprocessor=None, text_fields=['title', 'text', 'body', 'query'], push_query=True, filters=None):
+  def __init__(self, tokeniser, stemmer=None, preprocessor=None, text_fields=['title', 'text', 'body', 'query'], push_query=True, filters=None, return_toks=False):
     self.preprocessor = preprocessor
     self.tokeniser = tokeniser
     self.filters = filters
     self.stemmer = stemmer
     self.text_fields = [text_fields] if isinstance(text_fields, str) else text_fields
     self.push_query = push_query
+    self.return_toks = return_toks
 
   def transform(self, df):
     if self.push_query and 'query' in df.columns:
       pt.model.push_queries(df)
     if hasattr(df, 'parallel_apply'):
       df = df.assign(**{f: df[f].parallel_apply(self.process_text) for f in self.text_fields if f in df.columns})
+      if self.return_toks:
+        df = df.assign(**{f + '_toks': df[f].parallel_apply(self.process_toks) for f in self.text_fields if f in df.columns})
     else:
       df = df.assign(**{f: df[f].apply(self.process_text) for f in self.text_fields if f in df.columns})
+      if self.return_toks:
+        df = df.assign(**{f + '_toks': df[f].apply(self.process_toks) for f in self.text_fields if f in df.columns})
     return df
+
+  def process_toks(self, s):
+    if self.preprocessor:
+      s = self.preprocessor(s)
+    toks = self.tokeniser(s)
+    if self.filters:
+      for f in self.filters:
+        toks = f(toks)
+      toks = list(filter(None, toks))
+    if self.stemmer:
+      toks = map(self.stemmer, toks)
+    
+    freqs = Counter(toks)
+    return dict(freqs)
 
   def process_text(self, s):  
     if self.preprocessor:
@@ -37,7 +57,6 @@ class Preprocessor(pt.transformer.TransformerBase):
 
     if self.stemmer:
       toks = map(self.stemmer, toks)
-
     return ' '.join(toks)
 
 class StanzaPreprocessor(pt.transformer.TransformerBase):
@@ -99,7 +118,6 @@ def hazm_preprocessor(normalise=True, stem=True, remove_stops=True, remove_punct
     filters.append(filter_punct)
   
   return Preprocessor(hazm.word_tokenize, stemmer=stemmer, preprocessor=hazm.Normalizer().normalize if normalise else None, filters=filters)
-
 
 def spacy_preprocessor(model, supports_stem=True, remove_punct=True, remove_stops=True):
   '''
@@ -334,3 +352,27 @@ def stanza_preprocessor(lang, stem=True, remove_punct=True):
       return [' '.join(tok) for tok in toks]
     
   return StanzaPreprocessor(nlp=stanza.Pipeline(lang, processors=processors), tokeniser=tokenize, filters=filters)
+
+def anserini_tokenizer(lang):
+  '''
+  Creates Preprocessor that uses Anserini Tokenisers
+  '''
+  try:
+    from pyterrier_anserini import AnseriniTokenizer
+  except ImportError as e:
+    raise ImportError("Anserini Tokenizer required for preprocessing, please run 'pip install pyterrier-anserini'", e)
+
+  if lang == 'nl':
+    return Preprocessor(tokeniser=AnseriniTokenizer.nl.tokenize)
+  elif lang == 'zh':
+    return Preprocessor(tokeniser=AnseriniTokenizer.zh.tokenize, return_toks=True)
+  elif lang == "id":
+    return Preprocessor(tokeniser=AnseriniTokenizer.id.tokenize)
+  elif lang == "fr":
+    return Preprocessor(tokeniser=AnseriniTokenizer.fr.tokenize)
+  elif lang == "it":
+    return Preprocessor(tokeniser=AnseriniTokenizer.it.tokenize)
+  elif lang == "en":
+    return Preprocessor(tokeniser=AnseriniTokenizer.en.tokenize)
+  else:
+    raise ValueError(f"Anserini Tokenizer does not support {lang}")
